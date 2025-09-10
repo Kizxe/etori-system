@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String         @id @default(cuid())
+  name              String
+  email             String         @unique
+  password          String
+  role              Role           @default(STAFF)
+  department        String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  preferences       Json?
+  sentNotifications Notification[] @relation("SentBy")
+  stockRequests     StockRequest[]
+  notifications     Notification[] @relation("SentTo")
+}
+
+model Product {
+  id            String         @id @default(cuid())
+  name          String
+  sku           String         @unique
+  description   String?        @db.Text
+  categoryId    String
+  manufacturer  String?
+  model         String?
+  price         Decimal        @default(0.00) @db.Decimal(10, 2)
+  minimumStock  Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  barcode       String?        @unique
+  notifications Notification[]
+  category      Category       @relation(fields: [categoryId], references: [id])
+  SerialNumber  SerialNumber[]
+  stockRequests StockRequest[]
+
+  @@index([categoryId], map: "Product_categoryId_fkey")
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+model StorageLocation {
+  id           String         @id @default(cuid())
+  name         String         @unique
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  description  String?
+  SerialNumber SerialNumber[]
+}
+
+model StockRequest {
+  id             String        @id @default(cuid())
+  productId      String
+  userId         String
+  quantity       Int
+  status         RequestStatus @default(PENDING)
+  notes          String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  serialNumberId String?
+  product        Product       @relation(fields: [productId], references: [id])
+  SerialNumber   SerialNumber? @relation(fields: [serialNumberId], references: [id])
+  requestedBy    User          @relation(fields: [userId], references: [id])
+  notifications  Notification[]
+
+  @@index([productId], map: "StockRequest_productId_fkey")
+  @@index([serialNumberId], map: "StockRequest_serialNumberId_fkey")
+  @@index([userId], map: "StockRequest_userId_fkey")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String           @db.Text
+  productId String?
+  requestId String?
+  sentById  String
+  read      Boolean          @default(false)
+  type      NotificationType
+  createdAt DateTime         @default(now())
+  product   Product?         @relation(fields: [productId], references: [id])
+  request   StockRequest?   @relation(fields: [requestId], references: [id])
+  sentBy    User             @relation("SentBy", fields: [sentById], references: [id])
+  sentTo    User[]           @relation("SentTo")
+
+  @@index([productId], map: "Notification_productId_fkey")
+  @@index([requestId], map: "Notification_requestId_fkey")
+  @@index([sentById], map: "Notification_sentById_fkey")
+}
+
+model Counter {
+  id        String   @id @default("sku_counter")
+  name      String   @unique
+  value     Int      @default(0)
+  prefix    String   @default("SKU")
+  updatedAt DateTime @updatedAt
+}
+
+model SerialNumber {
+  id              String              @id @default(cuid())
+  serial          String              @unique
+  productId       String
+  locationId      String?
+  status          SerialNumber_status @default(IN_STOCK)
+  notes           String?             @db.Text
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @default(now())
+  StorageLocation StorageLocation?    @relation(fields: [locationId], references: [id])
+  Product         Product             @relation(fields: [productId], references: [id])
+  StockRequest    StockRequest[]
+
+  @@index([locationId])
+  @@index([productId])
+  @@index([serial])
+}
+
+enum Role {
+  STAFF
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum NotificationType {
+  STOCK_ALERT
+  REQUEST_UPDATE
+  SYSTEM
+}
+
+enum SerialNumber_status {
+  IN_STOCK
+  OUT_OF_STOCK
+  RESERVED
+  IN_TRANSIT
+  DAMAGED
+  LOST
+}
