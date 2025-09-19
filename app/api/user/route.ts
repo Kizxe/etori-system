@@ -1,24 +1,35 @@
 import { prisma } from '@/lib/prisma'
-import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Get the authenticated user from the session
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    // Read auth token from cookie (set by /api/auth/login)
+    const token = request.cookies.get('token')
+
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Find the user by email from the session
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
-    })
+    // Parse cookie value
+    let tokenData: { userId?: string | number; email?: string } = {}
+    try {
+      tokenData = JSON.parse(token.value)
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    }
+
+    // Prefer lookup by id, fallback to email
+    const where = tokenData.userId
+      ? { id: String(tokenData.userId) }
+      : tokenData.email
+      ? { email: tokenData.email }
+      : null
+
+    if (!where) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({ where })
     
     if (!user) {
       return NextResponse.json(
@@ -39,24 +50,36 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    // Get the authenticated user from the session
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    // Read auth token from cookie (set by /api/auth/login)
+    const cookieToken = request.cookies.get('token')
+
+    if (!cookieToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    let tokenData: { userId?: string | number; email?: string } = {}
+    try {
+      tokenData = JSON.parse(cookieToken.value)
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
     }
     
     const body = await request.json()
     
-    // Find the user by email from the session
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
-    })
+    // Find the current user using token data
+    const where = tokenData.userId
+      ? { id: String(tokenData.userId) }
+      : tokenData.email
+      ? { email: tokenData.email }
+      : null
+
+    if (!where) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({ where })
     
     if (!user) {
       return NextResponse.json(

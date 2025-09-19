@@ -22,6 +22,7 @@ import { CustomTooltip } from "@/components/ui/chart"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { SerialNumbersOverview } from "./serial-numbers-overview"
+import { getInventoryAgingStats, getAgingStatus, calculateDaysInInventory, getAgingStatusBadgeVariant, formatInventoryDate } from "@/lib/utils"
 
 interface Product {
   id: string
@@ -31,7 +32,12 @@ interface Product {
   }
   minimumStock: number
   SerialNumber?: {
+    id: string
+    serial: string
     status: string
+    inventoryDate: string
+    agingStatus: string
+    needsAttention: boolean
   }[]
   createdAt: string
 }
@@ -75,6 +81,18 @@ export default function Dashboard() {
     // Consider out of stock if no IN_STOCK items OR if there are OUT_OF_STOCK items
     return inStockCount === 0 || outOfStockCount > 0
   }).length
+
+  // Inventory Aging KPI Calculations
+  const allSerialNumbers = products.flatMap(product => 
+    product.SerialNumber?.map(sn => ({
+      ...sn,
+      productName: product.name,
+      productCategory: product.category.name
+    })) || []
+  )
+  
+  const agingStats = getInventoryAgingStats(allSerialNumbers)
+
 
   // Prepare chart data
   const categoryData = products.reduce((acc: { name: string; value: number }[], product) => {
@@ -203,6 +221,77 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Inventory Aging KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Items</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-green-500"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{agingStats.active}</div>
+            <p className="text-xs text-muted-foreground">
+              0-30 days in inventory
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Idle Items</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-yellow-500"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{agingStats.idle}</div>
+            <p className="text-xs text-muted-foreground">
+              31-44 days in inventory
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Obsolete Items</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-orange-500"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{agingStats.obsolete}</div>
+            <p className="text-xs text-muted-foreground">
+              45-89 days in inventory
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Surplus Items</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-red-500"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{agingStats.surplus}</div>
+            <p className="text-xs text-muted-foreground">
+              90+ days in inventory
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Items Needing Attention */}
+      {agingStats.needsAttention > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-orange-800">Items Needing Attention</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-800">{agingStats.needsAttention}</div>
+            <p className="text-xs text-orange-600">
+              Items marked for review and action
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Charts Section */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -211,7 +300,7 @@ export default function Dashboard() {
             <CardDescription>Distribution of products by category</CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer>
+            <ChartContainer config={{}}>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
@@ -219,7 +308,7 @@ export default function Dashboard() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -322,8 +411,67 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+       {/* Individual Items Aging Overview */}
+       <Card>
+        <CardHeader>
+          <CardTitle>Individual Items Aging Status</CardTitle>
+          <CardDescription>Detailed view of each item's aging status</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {allSerialNumbers
+              .filter(sn => sn.status === 'IN_STOCK')
+              .sort((a, b) => {
+                const daysA = calculateDaysInInventory(a.inventoryDate)
+                const daysB = calculateDaysInInventory(b.inventoryDate)
+                return daysB - daysA // Sort by oldest first
+              })
+              .slice(0, 10) // Show top 10 oldest items
+              .map((sn) => {
+                const agingStatus = getAgingStatus(sn.inventoryDate)
+                const days = calculateDaysInInventory(sn.inventoryDate)
+                
+                return (
+                  <div key={sn.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-medium truncate" title={sn.serial}>
+                          {sn.serial}
+                        </span>
+                        <Badge 
+                          variant={getAgingStatusBadgeVariant(agingStatus)}
+                          className="text-xs"
+                        >
+                          {agingStatus}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {sn.productName} • {sn.productCategory}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium">{days} days</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatInventoryDate(sn.inventoryDate)}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            
+            {allSerialNumbers.filter(sn => sn.status === 'IN_STOCK').length > 5 && (
+              <div className="text-center text-sm text-muted-foreground">
+                Showing 5 oldest items out of {allSerialNumbers.filter(sn => sn.status === 'IN_STOCK').length} total
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Serial Numbers Overview */}
       <SerialNumbersOverview limit={8} />
     </div>
+
+    
   )
 }

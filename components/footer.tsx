@@ -45,6 +45,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/asset-lifecycle" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Asset Lifecycle
+                </Link>
+              </li>
+              <li>
                 <Link href="/requests" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Requests
                 </Link>

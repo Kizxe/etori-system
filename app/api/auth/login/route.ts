@@ -22,6 +22,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!user.isActive) {
+      return NextResponse.json({ error: 'Account is deactivated' }, { status: 403 })
+    }
+
+    // Force password change on first login
+    if (user.mustChangePassword) {
+      const response = NextResponse.json({ requirePasswordChange: true })
+      response.cookies.set('token', JSON.stringify({ 
+        userId: user.id,
+        email: user.email,
+        requirePasswordChange: true
+      }), {
+        expires: new Date(Date.now() + 15 * 60 * 1000),
+        httpOnly: true,
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+      })
+      return response
+    }
+
     // Don't send the password in the response
     const { password, ...userWithoutPassword } = user
 

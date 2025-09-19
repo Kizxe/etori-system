@@ -7,7 +7,8 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-    "seed": "node prisma/seed.ts"
+    "seed": "node prisma/seed.ts",
+    "seed:aging": "tsx prisma/seed-aging.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -73,6 +74,7 @@
     "postcss": "^8.5",
     "prisma": "^6.12.0",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   },
   "prisma": {

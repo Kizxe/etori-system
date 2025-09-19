@@ -44,7 +44,8 @@ export async function GET(req: NextRequest) {
     const requests = await prisma.stockRequest.findMany({
       include: {
         product: true,
-        requestedBy: true
+        requestedBy: true,
+        SerialNumber: true
       },
       orderBy: {
         createdAt: 'desc'

@@ -1,13 +1,10 @@
-const { PrismaClient } = require('@prisma/client');
-
-// Create a dedicated Prisma client for SKU operations
-const prisma = new PrismaClient();
+import { prisma } from './prisma'
 
 /**
  * Generates a new SKU by incrementing the counter value
  * Format: PREFIX-00001 (padded to 5 digits)
  */
-async function generateSKU(): Promise<string> {
+export async function generateSKU(): Promise<string> {
   try {
     // Create or update counter in a single operation
     const counter = await prisma.counter.upsert({
@@ -35,7 +32,7 @@ async function generateSKU(): Promise<string> {
 /**
  * Updates the SKU counter prefix
  */
-async function updateSKUPrefix(newPrefix: string): Promise<void> {
+export async function updateSKUPrefix(newPrefix: string): Promise<void> {
   try {
     await prisma.counter.upsert({
       where: { id: 'sku_counter' },
@@ -56,7 +53,7 @@ async function updateSKUPrefix(newPrefix: string): Promise<void> {
 /**
  * Gets the current counter value without incrementing
  */
-async function getCurrentCounterValue(): Promise<{ value: number; prefix: string }> {
+export async function getCurrentCounterValue(): Promise<{ value: number; prefix: string }> {
   try {
     const counter = await prisma.counter.findUnique({
       where: { id: 'sku_counter' },
@@ -73,8 +70,4 @@ async function getCurrentCounterValue(): Promise<{ value: number; prefix: string
   }
 }
 
-module.exports = {
-  generateSKU,
-  updateSKUPrefix,
-  getCurrentCounterValue
-}; 
+// ESM exports above

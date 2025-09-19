@@ -3,10 +3,10 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { barcode: string } }
+  context: { params: Promise<{ barcode: string }> }
 ) {
   try {
-    const barcode = params.barcode
+    const { barcode } = await context.params
 
     if (!barcode) {
       return NextResponse.json(
@@ -19,7 +19,8 @@ export async function GET(
     const product = await prisma.product.findFirst({
       where: {
         OR: [
-          { sku: barcode }
+          { sku: barcode },
+          { barcode: barcode },
         ]
       },
       include: {

@@ -18,7 +18,6 @@ export function middleware(request: NextRequest) {
   // Define auth not required paths
   const authNotRequiredPaths = [
     '/auth/login',
-    '/auth/signup',
     '/auth/forgot-password',
   ]
   
@@ -40,6 +39,11 @@ export function middleware(request: NextRequest) {
   // If the user is already logged in and tries to access auth pages, redirect to home
   if (isAuthPath && token) {
     return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // Block public signup entirely
+  if (request.nextUrl.pathname.startsWith('/auth/signup')) {
+    return NextResponse.redirect(new URL('/auth/login', request.url))
   }
   
   return NextResponse.next()

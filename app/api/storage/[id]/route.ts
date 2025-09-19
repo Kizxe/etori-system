@@ -1,11 +1,41 @@
 import { prisma } from '@/lib/prisma'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Check if user is authenticated and is admin
+    const token = request.cookies.get('token')
+    
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    let tokenData: { userId?: string | number; email?: string } = {}
+    try {
+      tokenData = JSON.parse(token.value)
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    }
+
+    const where = tokenData.userId
+      ? { id: String(tokenData.userId) }
+      : tokenData.email
+      ? { email: tokenData.email }
+      : null
+
+    if (!where) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({ where })
+    
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
+    }
+
     const { id } = params
     const body = await request.json()
     const { name, description } = body
@@ -64,10 +94,40 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Check if user is authenticated and is admin
+    const token = request.cookies.get('token')
+    
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    let tokenData: { userId?: string | number; email?: string } = {}
+    try {
+      tokenData = JSON.parse(token.value)
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    }
+
+    const where = tokenData.userId
+      ? { id: String(tokenData.userId) }
+      : tokenData.email
+      ? { email: tokenData.email }
+      : null
+
+    if (!where) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({ where })
+    
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
+    }
+
     const { id } = params
 
     // Check if location exists

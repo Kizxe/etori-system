@@ -24,7 +24,7 @@ export default async function RequestDetailPage({ params }: PageProps) {
 
   const stockRequest = await prisma.stockRequest.findUnique({
     where: { id },
-    include: { product: true, requestedBy: true }
+    include: { product: true, requestedBy: true, SerialNumber: true }
   })
 
   if (!stockRequest) {
@@ -38,6 +38,9 @@ export default async function RequestDetailPage({ params }: PageProps) {
         <div><span className="font-medium">ID:</span> {stockRequest.id}</div>
         <div><span className="font-medium">Product:</span> {stockRequest.product.name}</div>
         <div><span className="font-medium">Quantity:</span> {stockRequest.quantity}</div>
+        {stockRequest.SerialNumber ? (
+          <div><span className="font-medium">Serial Number:</span> {stockRequest.SerialNumber.serial}</div>
+        ) : null}
         <div><span className="font-medium">Status:</span> {stockRequest.status}</div>
         <div><span className="font-medium">Requested By:</span> {stockRequest.requestedBy.name}</div>
         {stockRequest.notes ? (

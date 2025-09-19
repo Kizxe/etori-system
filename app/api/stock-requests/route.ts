@@ -15,6 +15,7 @@ export async function GET() {
             department: true,
           },
         },
+        SerialNumber: true,
       },
     })
     return NextResponse.json(requests)

@@ -53,7 +53,7 @@ interface StockRequest {
   requestedBy: User
   userId: string
   quantity: number
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' 
   notes?: string
   createdAt: string
   updatedAt: string
@@ -103,7 +103,8 @@ const RequestsPage = () => {
 
         // Fetch appropriate requests based on role
         let endpoint = '/api/requests'
-        if (userData?.role === 'ADMIN') {
+        const userRole = userData?.role?.toString().trim().toUpperCase()
+        if (userRole === 'ADMIN') {
           endpoint = '/api/requests/admin'
         }
         
@@ -134,7 +135,7 @@ const RequestsPage = () => {
     fetchUserAndRequests()
   }, [])
 
-  const getStatusBadge = (status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED') => {
+  const getStatusBadge = (status: 'PENDING' | 'APPROVED' | 'REJECTED' ) => {
     switch (status) {
       case 'PENDING':
         return <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
@@ -147,10 +148,6 @@ const RequestsPage = () => {
       case 'REJECTED':
         return <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
           <X className="mr-1 h-3 w-3" /> Rejected
-        </Badge>
-      case 'COMPLETED':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
-          <Check className="mr-1 h-3 w-3" /> Completed
         </Badge>
       default:
         return <Badge variant="outline">Unknown</Badge>
@@ -168,12 +165,26 @@ const RequestsPage = () => {
     )
   }
 
+  // Debug: Show current user role (remove this after fixing)
+  if (user) {
+    const userRole = user?.role?.toString().trim().toUpperCase()
+    console.log('Current user role:', user.role, 'Type:', typeof user.role)
+    console.log('Processed role:', userRole)
+    console.log('Is ADMIN?', userRole === 'ADMIN')
+    console.log('Is STAFF?', userRole === 'STAFF')
+  }
+
   // Staff view - simpler list of their requests with ability to create new ones
-  if (user?.role === 'STAFF') {
+  const userRole = user?.role?.toString().trim().toUpperCase()
+  if (userRole === 'STAFF') {
     return (
       <div className="container mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">My Stock Requests</h1>
+          <div>
+            <h1 className="text-2xl font-bold">My Stock Requests</h1>
+            <p className="text-sm text-muted-foreground">Role: {user.role}</p>
+          </div>
+          
           <Button onClick={() => router.push('/requests/new')}>
             <Plus className="mr-2 h-4 w-4" /> New Request
           </Button>
@@ -231,18 +242,19 @@ const RequestsPage = () => {
   // Admin view - tabs for different request statuses and options to approve/reject
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Stock Requests Management</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Stock Requests Management</h1>
+        <p className="text-sm text-muted-foreground">Role: {user?.role || 'Unknown'}</p>
+      </div>
       
       <Tabs defaultValue="pending" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="pending">Pending</TabsTrigger>
           <TabsTrigger value="approved">Approved</TabsTrigger>
           <TabsTrigger value="rejected">Rejected</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-          <TabsTrigger value="all">All Requests</TabsTrigger>
         </TabsList>
         
-        {['pending', 'approved', 'rejected', 'completed', 'all'].map((tab) => (
+        {['pending', 'approved', 'rejected'].map((tab) => (
           <TabsContent key={tab} value={tab}>
             <Card>
               <CardContent className="pt-6">

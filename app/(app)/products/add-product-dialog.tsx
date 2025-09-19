@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -20,24 +20,52 @@ import { Textarea } from "@/components/ui/textarea"
 
 interface AddProductDialogProps {
   onProductAdded: () => void
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  initialValues?: Partial<{
+    name: string
+    sku: string
+    barcode: string
+    categoryName: string
+  }>
 }
 
-export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
-  const [open, setOpen] = useState(false)
+export function AddProductDialog({ onProductAdded, trigger, open: controlledOpen, onOpenChange, initialValues }: AddProductDialogProps) {
+  const [open, setOpen] = useState(controlledOpen ?? false)
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     name: "",
     sku: "",
-    barcode: "",
+    barcode: initialValues?.barcode || "",
     description: "",
-    categoryName: "",
+    categoryName: initialValues?.categoryName || "",
     manufacturer: "",
     model: "",
     price: "0.00",
     minimumStock: "0",
-    initialStock: "0",
   })
+
+  // Sync controlled open
+  useEffect(() => {
+    if (typeof controlledOpen === 'boolean') {
+      setOpen(controlledOpen)
+    }
+  }, [controlledOpen])
+
+  // Prefill when initialValues change
+  useEffect(() => {
+    if (initialValues) {
+      setFormData(prev => ({
+        ...prev,
+        ...('name' in initialValues ? { name: initialValues.name || "" } : {}),
+        ...('sku' in initialValues ? { sku: initialValues.sku || "" } : {}),
+        ...('barcode' in initialValues ? { barcode: initialValues.barcode || "" } : {}),
+        ...('categoryName' in initialValues ? { categoryName: initialValues.categoryName || "" } : {}),
+      }))
+    }
+  }, [initialValues])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,7 +87,6 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
           model: formData.model || null,
           price: parseFloat(formData.price),
           minimumStock: parseInt(formData.minimumStock),
-          initialStock: parseInt(formData.initialStock),
         }),
       })
 
@@ -74,6 +101,7 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
       })
 
       setOpen(false)
+      onOpenChange?.(false)
       setFormData({
         name: "",
         sku: "",
@@ -84,7 +112,6 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
         model: "",
         price: "0.00",
         minimumStock: "0",
-        initialStock: "0",
       })
       onProductAdded()
     } catch (error) {
@@ -104,14 +131,16 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); onOpenChange?.(o) }}>
       <DialogTrigger asChild>
-        <Button size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Product
-        </Button>
+        {trigger || (
+          <Button size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Product
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Product</DialogTitle>
           <DialogDescription>
@@ -221,21 +250,6 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
                 disabled={isLoading}
                 required
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="initialStock">Initial Stock</Label>
-              <Input
-                id="initialStock"
-                type="number"
-                min="0"
-                value={formData.initialStock}
-                onChange={(e) => handleChange("initialStock", e.target.value)}
-                disabled={isLoading}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                This will create {formData.initialStock} serial numbers automatically
-              </p>
             </div>
           </div>
           <DialogFooter>

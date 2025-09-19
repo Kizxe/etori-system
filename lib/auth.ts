@@ -1,6 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
+import bcrypt from "bcryptjs";
 
 // Extend the built-in session types
 declare module "next-auth" {
@@ -39,14 +40,24 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // Example implementation - replace with your actual authentication logic
+        // Find user by email
         const user = await prisma.user.findUnique({
           where: { email: credentials.email }
         });
 
-        // In a real implementation, you would check the password
-        // This is just a placeholder
-        if (user) {
+        if (!user || !user.password) {
+          return null;
+        }
+
+        // Check if user is active
+        if (!user.isActive) {
+          return null;
+        }
+
+        // Verify password
+        const isValidPassword = await bcrypt.compare(credentials.password, user.password);
+        
+        if (isValidPassword) {
           return {
             id: user.id.toString(),
             email: user.email,

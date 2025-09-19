@@ -1,29 +1,45 @@
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 
-export async function GET() {
+// GET supports optional query param ?serial=VALUE to fetch one, otherwise lists all
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const serialQuery = searchParams.get('serial')
+
+    if (serialQuery) {
+      const serialNumber = await prisma.serialNumber.findUnique({
+        where: { serial: serialQuery },
+        include: {
+          StorageLocation: true,
+          Product: {
+            include: {
+              category: true,
+              SerialNumber: { include: { StorageLocation: true } },
+            }
+          }
+        }
+      })
+
+      if (!serialNumber) {
+        return NextResponse.json({ error: 'Serial number not found' }, { status: 404 })
+      }
+
+      return NextResponse.json({ serialNumber })
+    }
+
+    // default list behavior (existing)
     const serialNumbers = await prisma.serialNumber.findMany({
       include: {
-        Product: {
-          include: {
-            category: true
-          }
-        },
-        StorageLocation: true
+        Product: { include: { category: true } },
+        StorageLocation: true,
       },
-      orderBy: {
-        createdAt: 'desc'
-      }
+      orderBy: { createdAt: 'desc' }
     })
-
     return NextResponse.json({ serialNumbers })
   } catch (error) {
-    console.error('Error fetching serial numbers:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch serial numbers' },
-      { status: 500 }
-    )
+    console.error('Error in serial numbers GET:', error)
+    return NextResponse.json({ error: 'Failed to fetch serial numbers' }, { status: 500 })
   }
 }
 

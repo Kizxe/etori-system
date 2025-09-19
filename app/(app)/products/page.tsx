@@ -43,42 +43,11 @@ import { AddProductDialog } from "./add-product-dialog"
 import { EditProductDialog } from "./edit-product-dialog"
 import { ViewProductDialog } from "./view-product-dialog"
 import { ManageSerialNumbersDialog } from "./manage-serial-numbers-dialog"
+import { BulkEditDialog } from "./bulk-edit-dialog"
+import { SerialNumbersInfoDialog } from "./serial-numbers-info-dialog"
 import { generateInventoryPDF } from '@/lib/generate-pdf'
-import { cn, parsePrice, calculateTotalQuantity, calculateProductValue, formatCurrency } from "@/lib/utils"
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: 'ADMIN' | 'STAFF'
-}
-
-interface Product {
-  id: string
-  name: string
-  sku: string
-  barcode?: string | null
-  description: string | null
-  category: {
-    name: string
-  }
-  manufacturer: string | null
-  model: string | null
-  price: string | number
-  minimumStock: number
-  SerialNumber?: {
-    id: string
-    serial: string
-    status: string
-    StorageLocation?: {
-      id: string
-      name: string
-      description?: string | null
-    } | null
-  }[]
-  createdAt: string
-  updatedAt: string
-}
+import { cn, parsePrice, calculateTotalQuantity, calculateProductValue, formatCurrency, getAgingStatus, calculateDaysInInventory, getAgingStatusColor, getAgingStatusBadgeVariant, getAgingStatusLabel, formatInventoryDate } from "@/lib/utils"
+import { User, Product } from "@/lib/types"
 
 // Authentication function with better error handling
 const getCurrentUser = async (): Promise<User | null> => {
@@ -115,6 +84,10 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const { toast } = useToast()
+  const [viewProduct, setViewProduct] = useState<Product | null>(null)
+  const [isViewOpen, setIsViewOpen] = useState(false)
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [addInitial, setAddInitial] = useState<{ barcode?: string } | undefined>(undefined)
 
   // Fetch user and products
   useEffect(() => {
@@ -308,6 +281,11 @@ export default function ProductsPage() {
     generateInventoryPDF(products)
   }
 
+  const handleExportSelected = () => {
+    const selectedProductsData = products.filter(product => selectedProducts.includes(product.id))
+    generateInventoryPDF(selectedProductsData, `Selected Products - ${new Date().toLocaleDateString()}`)
+  }
+
   const handleDeleteProduct = async (productId: string, productName: string) => {
     if (!confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
       return
@@ -385,36 +363,31 @@ export default function ProductsPage() {
 
   const handleBarcodeScan = async (barcodeData: string) => {
     try {
-      const response = await fetch(`/api/products/barcode/${barcodeData}`)
-      if (response.ok) {
-        const product = await response.json()
-        
-        // Highlight the found product
-        setSearchTerm("")
-        setCategoryFilter("all")
-        setStatusFilter("all")
-        
-        // Find the product in the list and scroll to it
-        const productElement = document.getElementById(`product-${product.id}`)
-        if (productElement) {
-          productElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          productElement.classList.add('bg-primary/10')
-          setTimeout(() => {
-            productElement.classList.remove('bg-primary/10')
-          }, 2000)
-        }
-        
-        toast({
-          title: "Product Found",
-          description: `Found: ${product.name} (${product.sku})`,
-        })
-      } else {
-        toast({
-          title: "Product Not Found",
-          description: `No product found with barcode: ${barcodeData}`,
-          variant: "destructive",
-        })
+      // 1) Try product by barcode or SKU
+      const productRes = await fetch(`/api/products/barcode/${barcodeData}`)
+      if (productRes.ok) {
+        const product = await productRes.json()
+        setViewProduct(product)
+        setIsViewOpen(true)
+        toast({ title: "Product Found", description: `${product.name} (${product.sku})` })
+        return
       }
+
+      // 2) Try serial number lookup
+      const serialRes = await fetch(`/api/products/serial-numbers?serial=${encodeURIComponent(barcodeData)}`)
+      if (serialRes.ok) {
+        const { serialNumber } = await serialRes.json()
+        const product = serialNumber.Product
+        setViewProduct(product)
+        setIsViewOpen(true)
+        toast({ title: "Serial Found", description: `${serialNumber.serial} → ${product.name}` })
+        return
+      }
+
+      // 3) Offer to add new product prefilled with barcode
+      setAddInitial({ barcode: barcodeData })
+      setIsAddOpen(true)
+      toast({ title: "Not Found", description: `No match for ${barcodeData}. Add as new product?` })
     } catch (error) {
       console.error('Error scanning barcode:', error)
       toast({
@@ -501,21 +474,15 @@ export default function ProductsPage() {
               <FileText className="h-4 w-4" />
               Export PDF
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-2"
-              onClick={() => {
-                // Show a toast with information about serial numbers
-                toast({
-                  title: "Serial Numbers System",
-                  description: "Each product can have multiple serial numbers. Use the 'Manage Serial Numbers' button in each product's actions to add individual items.",
-                })
-              }}
-            >
-              <Package className="h-4 w-4" />
-              Serial Numbers Info
-            </Button>
+            <SerialNumbersInfoDialog 
+              products={products}
+              trigger={
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Package className="h-4 w-4" />
+                  Serial Numbers Info
+                </Button>
+              }
+            />
             {/* Admin-only actions */}
             {user?.role === 'ADMIN' && (
               <>
@@ -541,7 +508,12 @@ export default function ProductsPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-                <AddProductDialog onProductAdded={handleProductAdded} />
+                <AddProductDialog 
+                  onProductAdded={() => { handleProductAdded(); setIsAddOpen(false) }}
+                  open={isAddOpen}
+                  onOpenChange={setIsAddOpen}
+                  initialValues={addInitial}
+                />
               </>
             )}
           </div>
@@ -593,10 +565,17 @@ export default function ProductsPage() {
               {selectedProducts.length} product{selectedProducts.length > 1 ? "s" : ""} selected
             </span>
             <div className="ml-auto flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                Bulk Edit
-              </Button>
-              <Button variant="outline" size="sm">
+              <BulkEditDialog 
+                selectedProducts={products.filter(product => selectedProducts.includes(product.id))}
+                onBulkEditComplete={handleProductAdded}
+              />
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleExportSelected}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
                 Export Selected
               </Button>
               <Button 
@@ -629,7 +608,7 @@ export default function ProductsPage() {
                 <TableHead>Barcode</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Stock</TableHead>
-                <TableHead>Serial Numbers</TableHead>
+                <TableHead>Serial Numbers & Aging</TableHead>
                 <TableHead>Unit Price</TableHead>
                 <TableHead>Total Value</TableHead>
                 <TableHead>Status</TableHead>
@@ -664,13 +643,37 @@ export default function ProductsPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-2 max-w-xs">
                       <span className="text-sm font-medium">
-                        {product.SerialNumber?.length || 0} total
+                        {product.SerialNumber?.length || 0} items
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {product.SerialNumber?.filter(sn => sn.status === 'IN_STOCK').length || 0} in stock
-                      </span>
+                      <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
+                        {product.SerialNumber?.map((sn) => {
+                          const agingStatus = sn.inventoryDate ? getAgingStatus(sn.inventoryDate) : 'FRESH'
+                          const days = sn.inventoryDate ? calculateDaysInInventory(sn.inventoryDate) : 0
+                          
+                          return (
+                            <div key={sn.id} className="flex items-center justify-between gap-2 p-1 rounded border">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-mono truncate" title={sn.serial}>
+                                  {sn.serial}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {days} days
+                                </div>
+                               </div>
+                              <Badge 
+                                variant={getAgingStatusBadgeVariant(
+                                  agingStatus === 'FRESH' ? 'ACTIVE' : agingStatus
+                                )}
+                                className="text-xs shrink-0"
+                              >
+                                {agingStatus}
+                              </Badge>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">
@@ -731,18 +734,18 @@ export default function ProductsPage() {
                               onSerialNumbersUpdated={handleProductAdded}
                             />
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="gap-2"
-                              onClick={() => {
-                                toast({
-                                  title: "Serial Numbers System",
-                                  description: `This product has ${product.SerialNumber?.length || 0} serial numbers. Use 'Manage Serial Numbers' to add, edit, or remove individual items.`,
-                                })
-                              }}
-                            >
-                              <Package className="h-4 w-4" />
-                              Serial Numbers Info
-                            </DropdownMenuItem>
+                            <SerialNumbersInfoDialog 
+                              products={[product]}
+                              trigger={
+                                <DropdownMenuItem 
+                                  className="gap-2"
+                                  onSelect={(e) => e.preventDefault()}
+                                >
+                                  <Package className="h-4 w-4" />
+                                  Serial Numbers Info
+                                </DropdownMenuItem>
+                              }
+                            />
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               className="gap-2 text-red-600"
@@ -761,7 +764,7 @@ export default function ProductsPage() {
               ))}
               {paginatedProducts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={user?.role === 'ADMIN' ? 11 : 10} className="h-24 text-center">
+                  <TableCell colSpan={user?.role === 'ADMIN' ? 12 : 11} className="h-24 text-center">
                     No products found
                   </TableCell>
                 </TableRow>
@@ -825,6 +828,22 @@ export default function ProductsPage() {
           </div>
         </div>
       </div>
+      {/* Programmatic View Dialog */}
+      {viewProduct && (
+        <ViewProductDialog 
+          product={{
+            ...viewProduct,
+            SerialNumber: viewProduct.SerialNumber?.map(sn => ({
+              id: sn.id,
+              serial: sn.serial,
+              status: sn.status,
+              StorageLocation: sn.StorageLocation,
+            })) || [],
+          }}
+          open={isViewOpen}
+          onOpenChange={(o) => { setIsViewOpen(o); if (!o) setViewProduct(null) }}
+        />
+      )}
     </>
   )
 }

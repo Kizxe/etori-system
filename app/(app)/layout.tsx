@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import NotificationDropdown from "@/components/notification-dropdown"
 import { Separator } from "@/components/ui/separator"
 import { Footer } from "@/components/footer"
+import { UserProvider } from "@/lib/user-context"
 
 export default function AppLayout({
   children,
@@ -12,7 +13,7 @@ export default function AppLayout({
   children: React.ReactNode
 }) {
   return (
-    <>
+    <UserProvider>
       <SidebarProvider defaultOpen={true}>
         <AppSidebar />
         <SidebarInset className="flex-1 overflow-hidden">
@@ -30,6 +31,6 @@ export default function AppLayout({
         </SidebarInset>
       </SidebarProvider>
       <Footer />
-    </>
+    </UserProvider>
   )
 }

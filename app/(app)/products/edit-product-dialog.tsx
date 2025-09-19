@@ -152,13 +152,17 @@ export function EditProductDialog({ product, onProductUpdated }: EditProductDial
     setFormData(prev => ({
       ...prev,
       SerialNumber: prev.SerialNumber.map((sn, i) => 
-        i === index ? { 
-          ...sn, 
-          StorageLocation: { 
-            ...sn.StorageLocation, 
-            [field]: value 
-          } 
-        } : sn
+        i === index
+          ? {
+              ...sn,
+              StorageLocation: {
+                id: sn.StorageLocation?.id ?? "",
+                name: sn.StorageLocation?.name ?? "",
+                description: sn.StorageLocation?.description ?? null,
+                [field]: value
+              }
+            }
+          : sn
       )
     }))
   }
@@ -177,15 +181,15 @@ export function EditProductDialog({ product, onProductUpdated }: EditProductDial
           Edit Product
         </DropdownMenuItem>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Edit Product</DialogTitle>
           <DialogDescription>
             Make changes to the product information below.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1">
+          <div className="grid gap-4 py-4 flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="name">Product Name</Label>
@@ -274,48 +278,63 @@ export function EditProductDialog({ product, onProductUpdated }: EditProductDial
             </div>
 
             <div className="grid gap-2">
-              <Label>Serial Numbers & Storage Locations</Label>
-              {formData.SerialNumber.map((sn, index) => (
-                <div key={sn.id} className="grid grid-cols-3 gap-4 p-3 border rounded-lg">
-                  <div className="grid gap-1">
-                    <Label className="text-xs">Serial Number</Label>
-                    <Input
-                      value={sn.serial}
-                      onChange={(e) => handleSerialNumberChange(index, "serial", e.target.value)}
-                      placeholder="Serial number"
-                      disabled={isLoading}
-                    />
+              <div className="flex items-center justify-between">
+                <Label>Serial Numbers & Storage Locations</Label>
+                <span className="text-sm text-muted-foreground">
+                  {formData.SerialNumber.length} serial number{formData.SerialNumber.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="max-h-60 overflow-y-auto border rounded-lg p-2 space-y-2">
+                {formData.SerialNumber.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-4">
+                    No serial numbers found
                   </div>
-                  <div className="grid gap-1">
-                    <Label className="text-xs">Status</Label>
-                    <Select value={sn.status} onValueChange={(value) => handleSerialNumberChange(index, "status", value)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="IN_STOCK">In Stock</SelectItem>
-                        <SelectItem value="OUT_OF_STOCK">Out of Stock</SelectItem>
-                        <SelectItem value="RESERVED">Reserved</SelectItem>
-                        <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
-                        <SelectItem value="DAMAGED">Damaged</SelectItem>
-                        <SelectItem value="LOST">Lost</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-1">
-                    <Label className="text-xs">Storage Location</Label>
-                    <Input
-                      value={sn.StorageLocation?.name || ''}
-                      onChange={(e) => handleStorageLocationChange(index, "name", e.target.value)}
-                      placeholder="Location name"
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-              ))}
+                ) : (
+                  formData.SerialNumber.map((sn, index) => (
+                    <div key={sn.id} className="grid grid-cols-3 gap-4 p-3 border rounded-lg bg-muted/30">
+                      <div className="grid gap-1">
+                        <Label className="text-xs">Serial Number</Label>
+                        <Input
+                          value={sn.serial}
+                          onChange={(e) => handleSerialNumberChange(index, "serial", e.target.value)}
+                          placeholder="Serial number"
+                          disabled={isLoading}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <Label className="text-xs">Status</Label>
+                        <Select value={sn.status} onValueChange={(value) => handleSerialNumberChange(index, "status", value)}>
+                          <SelectTrigger className="text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="IN_STOCK">In Stock</SelectItem>
+                            <SelectItem value="OUT_OF_STOCK">Out of Stock</SelectItem>
+                            <SelectItem value="RESERVED">Reserved</SelectItem>
+                            <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
+                            <SelectItem value="DAMAGED">Damaged</SelectItem>
+                            <SelectItem value="LOST">Lost</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-1">
+                        <Label className="text-xs">Storage Location</Label>
+                        <Input
+                          value={sn.StorageLocation?.name || ''}
+                          onChange={(e) => handleStorageLocationChange(index, "name", e.target.value)}
+                          placeholder="Location name"
+                          disabled={isLoading}
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button type="submit" disabled={isLoading}>
               {isLoading ? "Saving..." : "Save Changes"}
             </Button>

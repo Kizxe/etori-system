@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button"
 import { Eye } from "lucide-react"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 interface Product {
   id: string
@@ -42,10 +41,18 @@ interface Product {
 
 interface ViewProductDialogProps {
   product: Product
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function ViewProductDialog({ product }: ViewProductDialogProps) {
-  const [open, setOpen] = useState(false)
+export function ViewProductDialog({ product, trigger, open: controlledOpen, onOpenChange }: ViewProductDialogProps) {
+  const [open, setOpen] = useState(controlledOpen ?? false)
+
+  // sync controlled state
+  useEffect(() => {
+    if (typeof controlledOpen === 'boolean') setOpen(controlledOpen)
+  }, [controlledOpen])
 
   const getTotalStock = () => {
     return product.SerialNumber?.filter(sn => sn.status === 'IN_STOCK').length || 0
@@ -72,19 +79,12 @@ export function ViewProductDialog({ product }: ViewProductDialogProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <DropdownMenuItem 
-          onSelect={(e) => {
-            e.preventDefault()
-            setOpen(true)
-          }} 
-          className="gap-2"
-        >
-          <Eye className="h-4 w-4" />
-          View Details
-        </DropdownMenuItem>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); onOpenChange?.(o) }}>
+      {trigger ? (
+        <DialogTrigger asChild>
+          {trigger}
+        </DialogTrigger>
+      ) : null}
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Product Details</DialogTitle>

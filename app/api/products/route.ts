@@ -1,7 +1,7 @@
 // app/api/products/route.ts
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-const { generateSKU } = require('@/lib/sku-generator')
+import { generateSKU } from '@/lib/sku-generator'
 
 export async function GET() {
   try {
@@ -86,6 +86,9 @@ export async function POST(request: Request) {
             productId: product.id,
             locationId: storageLocation.id,
             status: 'IN_STOCK',
+            inventoryDate: new Date(),
+            agingStatus: 'ACTIVE',
+            needsAttention: false,
             updatedAt: new Date(),
           },
         })

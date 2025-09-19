@@ -47,7 +47,8 @@ export async function GET(req: NextRequest) {
       },
       include: {
         product: true,
-        requestedBy: true
+        requestedBy: true,
+        SerialNumber: true
       },
       orderBy: {
         createdAt: 'desc'

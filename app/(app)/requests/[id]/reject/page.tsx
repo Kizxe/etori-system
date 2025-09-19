@@ -248,6 +248,12 @@ export default function RejectRequestPage() {
               <h3 className="text-sm font-medium text-muted-foreground">Quantity</h3>
               <p className="text-base">{request.quantity}</p>
             </div>
+            {request.SerialNumber && (
+              <div className="col-span-2">
+                <h3 className="text-sm font-medium text-muted-foreground">Serial Number</h3>
+                <p className="text-base">{request.SerialNumber.serial}</p>
+              </div>
+            )}
             <div>
               <h3 className="text-sm font-medium text-muted-foreground">Requested By</h3>
               <p className="text-base">{request.requestedBy?.name || 'Unknown'}</p>

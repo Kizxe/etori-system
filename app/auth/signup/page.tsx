@@ -97,7 +97,7 @@ export default function SignupPage() {
         name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email.toLowerCase(),
         password: formData.password,
-        role: formData.role === 'admin' ? 'ADMIN' : 'STAFF',
+        role: formData.role, // Use the role directly since it's already 'ADMIN' or 'STAFF'
         department: formData.company
       }
 
@@ -160,7 +160,7 @@ export default function SignupPage() {
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{
-        backgroundImage: "url('/gradiant-background.jpg')",
+        backgroundImage: "url('/white.jpg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",

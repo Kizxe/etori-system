@@ -51,6 +51,7 @@ export async function GET(
       include: {
         product: true,
         requestedBy: true,
+        SerialNumber: true,
       }
     })
     
@@ -158,7 +159,8 @@ export async function PATCH(
       },
       include: {
         product: true,
-        requestedBy: true
+        requestedBy: true,
+        SerialNumber: true
       }
     })
 

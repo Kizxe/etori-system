@@ -10,9 +10,12 @@ import {
   Sun,
   LogOut,
   ClipboardList,
+  Clock,
+  Users,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useRouter } from "next/navigation"
+import { useUser } from "@/lib/user-context"
 
 import {
   Sidebar,
@@ -52,6 +55,11 @@ const data = {
       icon: Package,
     },
     {
+      title: "Asset Lifecycle",
+      url: "/asset-lifecycle",
+      icon: Clock,
+    },
+    {
       title: "Requests",
       url: "/requests",
       icon: ClipboardList,
@@ -62,12 +70,30 @@ const data = {
       icon: BarChart3,
     },
   ],
+  adminNav: [
+    {
+      title: "User Management",
+      url: "/admin/users",
+      icon: Users,
+    },
+  ],
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { setTheme, theme } = useTheme()
   const router = useRouter()
   const { toast } = useToast()
+  const { user, isLoading } = useUser()
+
+  // Helper function to generate avatar initials
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
 
   const handleLogout = async () => {
     try {
@@ -110,7 +136,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Package className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">E-tori</span>
+                  <span className="truncate font-semibold">E-Tori</span>
                   <span className="truncate text-xs">Inventory System</span>
                 </div>
               </Link>
@@ -139,6 +165,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        
+        {user?.role === 'ADMIN' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {data.adminNav.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild tooltip={item.title}>
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter>
@@ -152,12 +198,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <Avatar className="h-8 w-8 rounded-lg">
-                    <AvatarImage src="/placeholder.svg" alt="Admin" />
-                    <AvatarFallback className="rounded-lg">AD</AvatarFallback>
+                    <AvatarImage src="/meow.jpg" alt={user?.name || "User"} />
+                    <AvatarFallback className="rounded-lg">
+                      {isLoading ? "..." : user ? getInitials(user.name) : "U"}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">Admin User</span>
-                    <span className="truncate text-xs">admin@company.com</span>
+                    <span className="truncate font-semibold">
+                      {isLoading ? "Loading..." : user?.name || "User"}
+                    </span>
+                    <span className="truncate text-xs">
+                      {isLoading ? "..." : user?.email || "user@example.com"}
+                    </span>
                   </div>
                 </SidebarMenuButton>
               </DropdownMenuTrigger>

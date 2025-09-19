@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
+// import removed: Checkbox
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, Package, AlertCircle, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  // removed rememberMe state
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -60,7 +60,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           email: formData.email.toLowerCase(),
           password: formData.password,
-          rememberMe: rememberMe,
+          // rememberMe removed
         }),
       })
 
@@ -70,9 +70,14 @@ export default function LoginPage() {
         throw new Error(data.error || 'Failed to login')
       }
 
+      if (data.requirePasswordChange) {
+        router.push('/auth/first-login')
+        return
+      }
+
       toast({
         title: "Login successful",
-        description: "Welcome back to InventoryPro!",
+        description: "Welcome back to E-Tori!",
       })
       router.push("/")
     } catch (error) {
@@ -97,7 +102,7 @@ export default function LoginPage() {
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{
-        backgroundImage: "url('/gradiant-background.jpg')",
+        backgroundImage: "url('/white.jpg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
@@ -159,7 +164,7 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-3xl font-bold font-sans text-card-foreground">Welcome Back</CardTitle>
           <CardDescription className="text-card-foreground/70 font-sans">
-            Sign in to your InventoryPro account to continue
+            Sign in to your E-Tori account to continue
           </CardDescription>
         </CardHeader>
 
@@ -222,23 +227,7 @@ export default function LoginPage() {
               {errors.password && <p className="text-sm text-red-200">{errors.password}</p>}
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="remember"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                  disabled={isLoading}
-                  className="border-white/40 data-[state=checked]:bg-blue-400 data-[state=checked]:border-blue-400"
-                />
-                <Label htmlFor="remember" className="text-sm font-normal text-card-foreground/80">
-                  Remember me
-                </Label>
-              </div>
-              <Link href="/auth/forgot-password" className="text-sm text-card-foreground/70 hover:text-card-foreground font-sans transition-colors">
-                Forgot password?
-              </Link>
-            </div>
+            {/* Remember me and forgot password removed */}
 
             <Button
               type="submit"
@@ -257,12 +246,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="text-center">
-            <span className="text-sm text-card-foreground/70 font-sans">Don't have an account? </span>
-            <Link href="/auth/signup" className="text-sm text-blue-300 hover:text-blue-200 font-sans font-medium transition-colors">
-              Sign up
-            </Link>
-          </div>
+          {/* Removed public signup link */}
         </CardContent>
       </Card>
     </div>

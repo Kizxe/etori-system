@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,9 @@ import {
 import { 
   Plus, 
   Package,
-  Info
+  Info,
+  Trash2,
+  Scan
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -53,13 +55,10 @@ export function BulkAddSerialNumbersDialog({
   const [storageLocations, setStorageLocations] = useState<StorageLocation[]>([])
   const { toast } = useToast()
 
-  const [formData, setFormData] = useState({
-    quantity: "1",
-    status: "IN_STOCK",
-    locationId: "",
-    prefix: "",
-    startNumber: "1",
-  })
+  const [serialNumbers, setSerialNumbers] = useState<string[]>([''])
+  const [status, setStatus] = useState("IN_STOCK")
+  const [locationId, setLocationId] = useState("")
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   // Fetch storage locations when dialog opens
   const handleOpenChange = async (newOpen: boolean) => {
@@ -74,6 +73,11 @@ export function BulkAddSerialNumbersDialog({
       } catch (error) {
         console.error('Error fetching storage locations:', error)
       }
+    } else {
+      // Reset form when dialog closes
+      setSerialNumbers([''])
+      setStatus("IN_STOCK")
+      setLocationId("")
     }
   }
 
@@ -82,15 +86,15 @@ export function BulkAddSerialNumbersDialog({
     setIsLoading(true)
 
     try {
-      const quantity = parseInt(formData.quantity)
-      const startNumber = parseInt(formData.startNumber)
+      // Filter out empty serial numbers
+      const validSerialNumbers = serialNumbers.filter(sn => sn.trim() !== '')
       
-      if (quantity <= 0 || startNumber <= 0) {
-        throw new Error('Quantity and start number must be positive')
+      if (validSerialNumbers.length === 0) {
+        throw new Error('Please enter at least one serial number')
       }
 
-      if (quantity > 100) {
-        throw new Error('Cannot add more than 100 serial numbers at once')
+      if (validSerialNumbers.length > 50) {
+        throw new Error('Cannot add more than 50 serial numbers at once')
       }
 
       const response = await fetch('/api/products/bulk-serial-numbers', {
@@ -100,11 +104,9 @@ export function BulkAddSerialNumbersDialog({
         },
         body: JSON.stringify({
           productId: product.id,
-          quantity,
-          status: formData.status,
-          locationId: formData.locationId || null,
-          prefix: formData.prefix || `SN-${product.sku}`,
-          startNumber,
+          serialNumbers: validSerialNumbers,
+          status,
+          locationId: locationId || null,
         }),
       })
 
@@ -125,13 +127,6 @@ export function BulkAddSerialNumbersDialog({
       })
 
       setOpen(false)
-      setFormData({
-        quantity: "1",
-        status: "IN_STOCK",
-        locationId: "",
-        prefix: `SN-${product.sku}`,
-        startNumber: "1",
-      })
       onSerialNumbersAdded()
     } catch (error) {
       console.error('Error adding serial numbers:', error)
@@ -145,24 +140,62 @@ export function BulkAddSerialNumbersDialog({
     }
   }
 
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+  // Handle serial number input changes
+  const handleSerialNumberChange = (index: number, value: string) => {
+    const newSerialNumbers = [...serialNumbers]
+    newSerialNumbers[index] = value
+    setSerialNumbers(newSerialNumbers)
+
+    // Auto-focus to next slot if current slot is filled and not the last one
+    if (value.trim() !== '' && index < serialNumbers.length - 1) {
+      setTimeout(() => {
+        const nextInput = inputRefs.current[index + 1]
+        if (nextInput) {
+          nextInput.focus()
+        }
+      }, 50)
+    }
   }
 
-  const generatePreview = () => {
-    const quantity = parseInt(formData.quantity) || 0
-    const startNumber = parseInt(formData.startNumber) || 1
-    const prefix = formData.prefix || `SN-${product.sku}`
-    
-    if (quantity <= 0) return []
-    
-    return Array.from({ length: Math.min(quantity, 5) }, (_, i) => {
-      const number = startNumber + i
-      return `${prefix}-${number.toString().padStart(3, '0')}`
-    })
+  // Add a new serial number slot
+  const addSerialNumberSlot = () => {
+    setSerialNumbers([...serialNumbers, ''])
+    // Focus the new input after it's rendered
+    setTimeout(() => {
+      const lastInput = inputRefs.current[serialNumbers.length]
+      if (lastInput) {
+        lastInput.focus()
+      }
+    }, 50)
   }
 
-  const preview = generatePreview()
+  // Remove a serial number slot
+  const removeSerialNumberSlot = (index: number) => {
+    if (serialNumbers.length > 1) {
+      const newSerialNumbers = serialNumbers.filter((_, i) => i !== index)
+      setSerialNumbers(newSerialNumbers)
+    }
+  }
+
+  // Handle key press for auto-advance
+  const handleKeyPress = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (index < serialNumbers.length - 1) {
+        const nextInput = inputRefs.current[index + 1]
+        if (nextInput) {
+          nextInput.focus()
+        }
+      } else {
+        // If it's the last slot and has content, add a new slot
+        if (serialNumbers[index].trim() !== '') {
+          addSerialNumberSlot()
+        }
+      }
+    }
+  }
+
+  const validSerialNumbers = serialNumbers.filter(sn => sn.trim() !== '')
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -172,47 +205,25 @@ export function BulkAddSerialNumbersDialog({
           Bulk Add Serial Numbers
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Bulk Add Serial Numbers</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Scan className="h-5 w-5" />
+            Bulk Add Serial Numbers
+          </DialogTitle>
           <DialogDescription>
-            Add multiple serial numbers to {product.name} at once. This is useful for adding inventory in bulk.
+            Add individual serial numbers to {product.name}. Perfect for barcode scanning - each slot will auto-advance to the next when filled.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="grid gap-6 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="quantity">Quantity *</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                max="100"
-                value={formData.quantity}
-                onChange={(e) => handleChange('quantity', e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="startNumber">Start Number</Label>
-              <Input
-                id="startNumber"
-                type="number"
-                min="1"
-                value={formData.startNumber}
-                onChange={(e) => handleChange('startNumber', e.target.value)}
-                placeholder="1"
-              />
-            </div>
-          </div>
-
+          {/* Status and Location */}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="status">Status *</Label>
               <Select 
-                value={formData.status} 
-                onValueChange={(value) => handleChange('status', value)}
+                value={status} 
+                onValueChange={setStatus}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -226,8 +237,8 @@ export function BulkAddSerialNumbersDialog({
             <div className="grid gap-2">
               <Label htmlFor="locationId">Storage Location</Label>
               <Select 
-                value={formData.locationId} 
-                onValueChange={(value) => handleChange('locationId', value)}
+                value={locationId} 
+                onValueChange={setLocationId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select location" />
@@ -243,47 +254,84 @@ export function BulkAddSerialNumbersDialog({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="prefix">Serial Number Prefix</Label>
-            <Input
-              id="prefix"
-              value={formData.prefix}
-              onChange={(e) => handleChange('prefix', e.target.value)}
-              placeholder={`SN-${product.sku}`}
-            />
-            <p className="text-xs text-muted-foreground">
-              Leave empty to use default: SN-{product.sku}
-            </p>
-          </div>
+          {/* Serial Number Input Slots */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-medium">Serial Numbers *</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSerialNumberSlot}
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Slot
+              </Button>
+            </div>
+            
+            <div className="space-y-3 max-h-60 overflow-y-auto border rounded-lg p-4">
+              {serialNumbers.map((serialNumber, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <Input
+                      ref={(el) => {
+                        inputRefs.current[index] = el;
+                      }}
+                      value={serialNumber}
+                      onChange={(e) => handleSerialNumberChange(index, e.target.value)}
+                      onKeyPress={(e) => handleKeyPress(index, e)}
+                      placeholder={`Serial number ${index + 1}`}
+                      className="font-mono"
+                    />
+                  </div>
+                  {serialNumbers.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeSerialNumberSlot(index)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
 
-          {/* Preview */}
-          {preview.length > 0 && (
-            <div className="rounded-lg border p-3 bg-muted/50">
-              <div className="flex items-center gap-2 mb-2">
-                <Info className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Preview (first 5):</span>
-              </div>
-              <div className="grid gap-1">
-                {preview.map((serial, index) => (
-                  <div key={index} className="text-xs font-mono text-muted-foreground">
-                    {serial}
-                  </div>
-                ))}
-                {parseInt(formData.quantity) > 5 && (
-                  <div className="text-xs text-muted-foreground">
-                    ... and {parseInt(formData.quantity) - 5} more
-                  </div>
-                )}
-              </div>
-              <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                <strong>Note:</strong> If any serial numbers already exist, they will be skipped and only new ones will be created.
+            {/* Instructions */}
+            <div className="rounded-lg border p-3 bg-blue-50 dark:bg-blue-950/20">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                <div className="text-sm text-blue-800 dark:text-blue-200">
+                  <p className="font-medium mb-1">Barcode Scanner Friendly:</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• Fill a slot and it will automatically move to the next</li>
+                    <li>• Press Enter to manually advance to the next slot</li>
+                    <li>• Press Enter on the last slot to add a new slot</li>
+                    <li>• Empty slots will be ignored when submitting</li>
+                  </ul>
+                </div>
               </div>
             </div>
-          )}
+
+            {/* Summary */}
+            {validSerialNumbers.length > 0 && (
+              <div className="rounded-lg border p-3 bg-green-50 dark:bg-green-950/20">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                    Ready to add {validSerialNumbers.length} serial number{validSerialNumbers.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Adding..." : `Add ${formData.quantity} Serial Numbers`}
+            <Button type="submit" disabled={isLoading || validSerialNumbers.length === 0}>
+              {isLoading ? "Adding..." : `Add ${validSerialNumbers.length} Serial Number${validSerialNumbers.length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </form>

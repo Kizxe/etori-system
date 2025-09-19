@@ -4,19 +4,26 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { productId, quantity, status, locationId, prefix, startNumber } = body
+    const { productId, serialNumbers, status, locationId } = body
 
     // Validate required fields
-    if (!productId || !quantity || !status) {
+    if (!productId || !serialNumbers || !Array.isArray(serialNumbers) || !status) {
       return NextResponse.json(
-        { error: 'Product ID, quantity, and status are required' },
+        { error: 'Product ID, serial numbers array, and status are required' },
         { status: 400 }
       )
     }
 
-    if (quantity <= 0 || quantity > 100) {
+    if (serialNumbers.length === 0) {
       return NextResponse.json(
-        { error: 'Quantity must be between 1 and 100' },
+        { error: 'At least one serial number is required' },
+        { status: 400 }
+      )
+    }
+
+    if (serialNumbers.length > 100) {
+      return NextResponse.json(
+        { error: 'Cannot add more than 100 serial numbers at once' },
         { status: 400 }
       )
     }
@@ -33,39 +40,44 @@ export async function POST(request: Request) {
       )
     }
 
-    // Generate serial numbers
-    const serialNumbers = []
+    // Process serial numbers
+    const serialNumbersToCreate = []
     const skippedSerials = []
-    const basePrefix = prefix || `SN-${product.sku}`
     
-    for (let i = 0; i < quantity; i++) {
-      const number = startNumber + i
-      const serial = `${basePrefix}-${number.toString().padStart(3, '0')}`
+    for (const serial of serialNumbers) {
+      const trimmedSerial = serial.trim()
+      
+      if (!trimmedSerial) {
+        continue // Skip empty serial numbers
+      }
       
       // Check if serial number already exists
       const existingSerial = await prisma.serialNumber.findUnique({
-        where: { serial }
+        where: { serial: trimmedSerial }
       })
 
       if (existingSerial) {
-        skippedSerials.push(serial)
+        skippedSerials.push(trimmedSerial)
         continue // Skip this serial number and continue with the next one
       }
 
-      serialNumbers.push({
-        serial,
+      serialNumbersToCreate.push({
+        serial: trimmedSerial,
         productId,
         status: status as any,
         locationId: locationId || null,
         notes: null,
+        inventoryDate: new Date(), // Set inventory date when item is created
+        agingStatus: 'FRESH', // Start as fresh
+        needsAttention: false,
       })
     }
 
     // If no new serial numbers can be created, return an error
-    if (serialNumbers.length === 0) {
+    if (serialNumbersToCreate.length === 0) {
       return NextResponse.json(
         { 
-          error: `All serial numbers in the range already exist. Skipped: ${skippedSerials.join(', ')}`,
+          error: `All provided serial numbers already exist. Skipped: ${skippedSerials.join(', ')}`,
           skippedSerials 
         },
         { status: 400 }
@@ -74,7 +86,7 @@ export async function POST(request: Request) {
 
     // Create all serial numbers in a transaction
     const createdSerialNumbers = await prisma.$transaction(
-      serialNumbers.map(sn => 
+      serialNumbersToCreate.map(sn => 
         prisma.serialNumber.create({
           data: sn,
           include: {
@@ -90,10 +102,10 @@ export async function POST(request: Request) {
     )
 
     return NextResponse.json({
-      message: `Successfully created ${serialNumbers.length} serial numbers${skippedSerials.length > 0 ? ` (${skippedSerials.length} skipped as they already exist)` : ''}`,
+      message: `Successfully created ${serialNumbersToCreate.length} serial numbers${skippedSerials.length > 0 ? ` (${skippedSerials.length} skipped as they already exist)` : ''}`,
       serialNumbers: createdSerialNumbers,
       skippedSerials: skippedSerials,
-      created: serialNumbers.length,
+      created: serialNumbersToCreate.length,
       skipped: skippedSerials.length
     })
   } catch (error) {

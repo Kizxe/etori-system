@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/lib/user-context"
 import {
   Select,
   SelectContent,
@@ -28,7 +29,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { Loader2 } from "lucide-react"
+import { Loader2, RefreshCw } from "lucide-react"
 import { StorageLocationsDialog } from "./storage-locations-dialog"
  
 // Profile form schema
@@ -73,9 +74,12 @@ type SKUSettingsValues = z.infer<typeof skuSettingsSchema>
 
 export default function SettingsPage() {
   const { toast } = useToast()
+  const { user, refreshUser } = useUser()
   const [isLoading, setIsLoading] = useState(false)
   const [skuInfo, setSkuInfo] = useState({ prefix: "", currentValue: 0, nextSKU: "" })
   const [isLoadingSKU, setIsLoadingSKU] = useState(false)
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
 
   // Profile form
   const profileForm = useForm<ProfileFormValues>({
@@ -118,64 +122,52 @@ export default function SettingsPage() {
 
   // Load user data and preferences
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const response = await fetch('/api/user')
-        
-        if (response.status === 401) {
-          // Redirect to login page if unauthorized
-          window.location.href = '/auth/login'
-          return
-        }
-        
-        if (!response.ok) throw new Error('Failed to fetch user data')
-        
-        const data = await response.json()
-        
-        profileForm.reset({
-          name: data.name,
-          email: data.email,
-          department: data.department,
-        })
+    if (user) {
+      profileForm.reset({
+        name: user.name,
+        email: user.email,
+        department: user.department,
+      })
 
-        if (data.preferences) {
-          const preferences = JSON.parse(data.preferences)
-          preferencesForm.reset({
-            darkMode: preferences.darkMode,
-            dateFormat: preferences.dateFormat,
-            lowStockAlert: preferences.lowStockAlert ?? true,
-            stockRequestNotification: preferences.stockRequestNotification ?? true,
-          })
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load user data",
-          variant: "destructive"
+      if (user.preferences) {
+        const preferences = JSON.parse(user.preferences)
+        preferencesForm.reset({
+          darkMode: preferences.darkMode,
+          dateFormat: preferences.dateFormat,
+          lowStockAlert: preferences.lowStockAlert ?? true,
+          stockRequestNotification: preferences.stockRequestNotification ?? true,
         })
       }
+      setIsInitialLoading(false)
     }
-    fetchUserData()
-  }, [])
+  }, [user])
   
-  // Load SKU settings
-  useEffect(() => {
-    const fetchSKUSettings = async () => {
-      try {
-        const response = await fetch('/api/settings/sku-prefix')
-        if (response.ok) {
-          const data = await response.json()
-          setSkuInfo(data)
-          skuSettingsForm.setValue('prefix', data.prefix)
-        }
-      } catch (error) {
-        console.error('Error fetching SKU settings:', error)
+  // Load SKU settings (only for admin users)
+  const fetchSKUSettings = async () => {
+    try {
+      const response = await fetch('/api/settings/sku-prefix')
+      if (response.ok) {
+        const data = await response.json()
+        setSkuInfo(data)
+        skuSettingsForm.setValue('prefix', data.prefix)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch SKU settings')
       }
+    } catch (error) {
+      console.error('Error fetching SKU settings:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch SKU settings",
+        variant: "destructive"
+      })
     }
+  }
 
+  useEffect(() => {
+    if (user?.role !== 'ADMIN') return
     fetchSKUSettings()
-  }, [])
+  }, [user?.role])
 
     // Handle profile update
     async function onProfileSubmit(data: ProfileFormValues) {
@@ -187,7 +179,13 @@ export default function SettingsPage() {
         body: JSON.stringify(data),
       })
 
-      if (!response.ok) throw new Error('Failed to update profile')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update profile')
+      }
+
+      // Refresh user context to update sidebar
+      await refreshUser()
 
       toast({
         title: "Success",
@@ -197,7 +195,7 @@ export default function SettingsPage() {
       console.error('Error updating profile:', error)
       toast({
         title: "Error",
-        description: "Failed to update profile",
+        description: error instanceof Error ? error.message : "Failed to update profile",
         variant: "destructive"
       })
     } finally {
@@ -215,7 +213,10 @@ export default function SettingsPage() {
         body: JSON.stringify(data),
       })
 
-      if (!response.ok) throw new Error('Failed to update password')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update password')
+      }
 
       toast({
         title: "Success",
@@ -226,7 +227,7 @@ export default function SettingsPage() {
       console.error('Error updating password:', error)
       toast({
         title: "Error",
-        description: "Failed to update password",
+        description: error instanceof Error ? error.message : "Failed to update password",
         variant: "destructive"
       })
     } finally {
@@ -236,7 +237,7 @@ export default function SettingsPage() {
 
   // Handle preferences update
   async function onPreferencesSubmit(data: PreferencesValues) {
-    setIsLoading(true)
+    setIsSavingPreferences(true)
     try {
       const response = await fetch('/api/user/preferences', {
         method: 'PUT',
@@ -244,7 +245,10 @@ export default function SettingsPage() {
         body: JSON.stringify(data),
       })
 
-      if (!response.ok) throw new Error('Failed to update preferences')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update preferences')
+      }
 
       toast({
         title: "Success",
@@ -257,12 +261,26 @@ export default function SettingsPage() {
       console.error('Error updating preferences:', error)
       toast({
         title: "Error",
-        description: "Failed to update preferences",
+        description: error instanceof Error ? error.message : "Failed to update preferences",
         variant: "destructive"
       })
     } finally {
-      setIsLoading(false)
+      setIsSavingPreferences(false)
     }
+  }
+
+  // Auto-save preferences when switches are toggled
+  const handlePreferenceChange = async (field: keyof PreferencesValues, value: boolean | string) => {
+    const currentValues = preferencesForm.getValues()
+    const updatedValues = { ...currentValues, [field]: value }
+    
+    // Apply dark mode change immediately for better UX
+    if (field === 'darkMode') {
+      document.documentElement.classList.toggle('dark', value as boolean)
+    }
+    
+    // Auto-save the preference
+    await onPreferencesSubmit(updatedValues)
   }
 
   async function onSKUSettingsSubmit(data: SKUSettingsValues) {
@@ -277,7 +295,8 @@ export default function SettingsPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update SKU prefix')
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update SKU prefix')
       }
 
       const result = await response.json()
@@ -291,12 +310,28 @@ export default function SettingsPage() {
       console.error('Error updating SKU prefix:', error)
       toast({
         title: "Error",
-        description: "Failed to update SKU prefix",
+        description: error instanceof Error ? error.message : "Failed to update SKU prefix",
         variant: "destructive",
       })
     } finally {
       setIsLoadingSKU(false)
     }
+  }
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="flex items-center justify-between space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span>Loading settings...</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -310,7 +345,9 @@ export default function SettingsPage() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
+          {user?.role === 'ADMIN' && (
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile" className="space-y-4">
@@ -453,7 +490,11 @@ export default function SettingsPage() {
                         <FormControl>
                           <Switch
                             checked={field.value}
-                            onCheckedChange={field.onChange}
+                            onCheckedChange={(value) => {
+                              field.onChange(value)
+                              handlePreferenceChange('lowStockAlert', value)
+                            }}
+                            disabled={isSavingPreferences}
                           />
                         </FormControl>
                       </FormItem>
@@ -474,19 +515,22 @@ export default function SettingsPage() {
                         <FormControl>
                           <Switch
                             checked={field.value}
-                            onCheckedChange={field.onChange}
+                            onCheckedChange={(value) => {
+                              field.onChange(value)
+                              handlePreferenceChange('stockRequestNotification', value)
+                            }}
+                            disabled={isSavingPreferences}
                           />
                         </FormControl>
                       </FormItem>
                     )}
                   />
-                  <Button 
-                    type="button" 
-                    disabled={isLoading}
-                    onClick={preferencesForm.handleSubmit(onPreferencesSubmit)}
-                  >
-                    {isLoading ? "Saving..." : "Save notification preferences"}
-                  </Button>
+                  {isSavingPreferences && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving preferences...
+                    </div>
+                  )}
                 </form>
               </Form>
             </CardContent>
@@ -518,7 +562,11 @@ export default function SettingsPage() {
                         <FormControl>
                           <Switch
                             checked={field.value}
-                            onCheckedChange={field.onChange}
+                            onCheckedChange={(value) => {
+                              field.onChange(value)
+                              handlePreferenceChange('darkMode', value)
+                            }}
+                            disabled={isSavingPreferences}
                           />
                         </FormControl>
                       </FormItem>
@@ -533,7 +581,11 @@ export default function SettingsPage() {
                         <FormLabel>Date Format</FormLabel>
                         <Select
                           value={field.value}
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value)
+                            handlePreferenceChange('dateFormat', value)
+                          }}
+                          disabled={isSavingPreferences}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -550,96 +602,117 @@ export default function SettingsPage() {
                       </FormItem>
                     )}
                   />
-                  <Button 
-                    type="button" 
-                    disabled={isLoading}
-                    onClick={preferencesForm.handleSubmit(onPreferencesSubmit)}
+                  {isSavingPreferences && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving preferences...
+                    </div>
+                  )}
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {user?.role === 'ADMIN' && (
+          <TabsContent value="inventory" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>SKU Settings</CardTitle>
+                    <CardDescription>
+                      Configure how SKUs are generated for new products.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchSKUSettings}
+                    disabled={isLoadingSKU}
+                    className="gap-2"
                   >
-                    {isLoading ? "Saving..." : "Save appearance settings"}
+                    <RefreshCw className={`h-4 w-4 ${isLoadingSKU ? 'animate-spin' : ''}`} />
+                    Refresh
                   </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="inventory" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>SKU Settings</CardTitle>
-              <CardDescription>
-                Configure how SKUs are generated for new products.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <div className="text-sm font-medium">Current SKU Information</div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">Current Prefix</div>
-                    <div className="font-mono">{skuInfo.prefix}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">Current Counter</div>
-                    <div className="font-mono">{skuInfo.currentValue}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">Next SKU</div>
-                    <div className="font-mono">{skuInfo.nextSKU}</div>
-                  </div>
                 </div>
-              </div>
-              
-              <Separator />
-              
-              <Form {...skuSettingsForm}>
-                <form onSubmit={skuSettingsForm.handleSubmit(onSKUSettingsSubmit)} className="space-y-4">
-                  <FormField
-                    control={skuSettingsForm.control}
-                    name="prefix"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>SKU Prefix</FormLabel>
-                        <FormControl>
-                          <Input {...field} maxLength={5} className="uppercase" />
-                        </FormControl>
-                        <FormDescription>
-                          Set a prefix for automatically generated SKUs (e.g., "SKU" for SKU-00001)
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <Button type="submit" disabled={isLoadingSKU}>
-                    {isLoadingSKU && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Update Prefix
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Storage Locations</CardTitle>
-              <CardDescription>
-                Manage storage locations for your inventory items. Each location can contain multiple serial numbers.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-1">
-                  <div className="text-sm font-medium">Storage Management</div>
-                  <div className="text-sm text-muted-foreground">
-                    Add, edit, and manage storage locations for better inventory organization.
+                  <div className="text-sm font-medium">Current SKU Information</div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Current Prefix</div>
+                      <div className="font-mono">{skuInfo.prefix}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Current Counter</div>
+                      <div className="font-mono">{skuInfo.currentValue}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Next SKU</div>
+                      <div className="font-mono">{skuInfo.nextSKU}</div>
+                    </div>
                   </div>
                 </div>
-                <StorageLocationsDialog onLocationsUpdated={() => {}} />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                
+                <Separator />
+                
+                <Form {...skuSettingsForm}>
+                  <form onSubmit={skuSettingsForm.handleSubmit(onSKUSettingsSubmit)} className="space-y-4">
+                    <FormField
+                      control={skuSettingsForm.control}
+                      name="prefix"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>SKU Prefix</FormLabel>
+                          <FormControl>
+                            <Input {...field} maxLength={5} className="uppercase" />
+                          </FormControl>
+                          <FormDescription>
+                            Set a prefix for automatically generated SKUs (e.g., "SKU" for SKU-00001)
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <Button type="submit" disabled={isLoadingSKU}>
+                      {isLoadingSKU && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Update Prefix
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Storage Locations</CardTitle>
+                <CardDescription>
+                  Manage storage locations for your inventory items. Each location can contain multiple serial numbers.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">Storage Management</div>
+                    <div className="text-sm text-muted-foreground">
+                      Add, edit, and manage storage locations for better inventory organization.
+                    </div>
+                  </div>
+                  <StorageLocationsDialog onLocationsUpdated={() => {
+                    // Refresh any relevant data if needed
+                    toast({
+                      title: "Success",
+                      description: "Storage locations updated successfully",
+                    })
+                  }} />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
